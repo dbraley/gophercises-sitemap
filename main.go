@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,8 +15,20 @@ func main() {
 	urlFlag := flag.String("url", "http://gophercises.com", "the url that you want to build a site map for")
 	flag.Parse()
 
-	// GET the webpage
-	resp, err := http.Get(*urlFlag)
+	pages := get(*urlFlag)
+
+	for _, page := range pages {
+		fmt.Println(page)
+	}
+
+	// build proper urls with our links
+	// filter out links w/ a different name
+	// find all pages (BFS)
+	// print out xml
+}
+
+func get(urlStr string) []string {
+	resp, err := http.Get(urlStr)
 	if err != nil {
 		panic(err)
 	}
@@ -28,29 +41,40 @@ func main() {
 	}
 
 	base := baseUrl.String()
-	fmt.Println(base)
 
-	// Parse all the links on the page
-	var hrefs []string
-	links, _ := link.Parse(resp.Body)
+	return filter(hrefs(resp.Body, base), withPrefix(base))
+}
 
+func hrefs(r io.Reader, base string) []string {
+	var ret []string
+	links, _ := link.Parse(r)
 	for _, l := range links {
 		switch {
 		case strings.HasPrefix(l.Href, "/"):
-			hrefs = append(hrefs, base+l.Href)
+			ret = append(ret, base+l.Href)
 		case strings.HasPrefix(l.Href, "http"):
-			hrefs = append(hrefs, l.Href)
+			ret = append(ret, l.Href)
 		default:
 			fmt.Println("Ignoring " + l.Href)
 		}
 	}
+	return ret
+}
 
-	for _, href := range hrefs {
-		fmt.Println(href)
+func filter(links []string, keepFn func(string) bool) []string {
+	var ret []string
+	for _, link := range links {
+		if keepFn(link) {
+			ret = append(ret, link)
+		} else {
+			fmt.Println("Ignoring " + link)
+		}
 	}
+	return ret
+}
 
-	// build proper urls with our links
-	// filter out links w/ a different name
-	// find all pages (BFS)
-	// print out xml
+func withPrefix(pfx string) func(string) bool {
+	return func(link string) bool {
+		return strings.HasPrefix(link, pfx)
+	}
 }
